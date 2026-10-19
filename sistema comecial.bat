@@ -2,8 +2,14 @@
 setlocal enabledelayedexpansion
 title FERRIRAPLAS COMERCIAL - GESTAO
 
+:: Configuração do arquivo de Banco de Dados
+set "DB_FILE=banco_dados.dat"
+
+:CARREGAR_DB
+:: Inicializa valores padrão caso o banco de dados não exista
 set "jaExisteCadastro=falso"
-set "logado=falso"
+set "usuarioCadastrado="
+set "senhaCadastrada="
 set /a qtdProdutos=0
 set /a saldoCaixa=0
 
@@ -14,29 +20,55 @@ for /l %%i in (1,1,5) do (
     set "salarioFuncionarios[%%i]=0"
 )
 
+:: Carrega os dados salvos tratando corretamente strings
+if exist "%DB_FILE%" (
+    for /f "usebackq tokens=1,2 delims==" %%a in ("%DB_FILE%") do (
+        set "%%a=%%b"
+    )
+)
+set "logado=falso"
+
 :MENU_ACESSO
 cls
 echo ====================================
 echo        FERRIRAPLAS COMERCIAL
 echo ====================================
 echo 1 - Fazer login
-echo 2 - Criar conta administrativa
-echo 3 - Desligar sistema
+echo 2 - Criar/Alterar conta administrativa
+echo 3 - Remover conta administrativa
+echo 4 - Desligar sistema
 echo.
 set "opcaoAcesso="
 set /p "opcaoAcesso=Escolha uma opcao: "
 
 if "%opcaoAcesso%"=="1" goto :LOGIN
 if "%opcaoAcesso%"=="2" goto :CADASTRO_ADM
-if "%opcaoAcesso%"=="3" goto :ENCERRAR
+if "%opcaoAcesso%"=="3" goto :REMOVER_ADM
+if "%opcaoAcesso%"=="4" goto :ENCERRAR
 echo Opcao invalida!
 pause
 goto :MENU_ACESSO
 
+:SALVAR_DB
+:: ATENCAO: Os comandos abaixo nao tem espacos antes do '>' para nao salvar espacos invisiveis no arquivo!
+(echo jaExisteCadastro=%jaExisteCadastro%)> "%DB_FILE%"
+(echo usuarioCadastrado=%usuarioCadastrado%)>> "%DB_FILE%"
+(echo senhaCadastrada=%senhaCadastrada%)>> "%DB_FILE%"
+(echo qtdProdutos=%qtdProdutos%)>> "%DB_FILE%"
+(echo saldoCaixa=%saldoCaixa%)>> "%DB_FILE%"
+
+for /l %%i in (1,1,5) do (
+    (echo cadastradoFuncionarios[%%i]=!cadastradoFuncionarios[%%i]!)>> "%DB_FILE%"
+    (echo nomeFuncionarios[%%i]=!nomeFuncionarios[%%i]!)>> "%DB_FILE%"
+    (echo idadeFuncionarios[%%i]=!idadeFuncionarios[%%i]!)>> "%DB_FILE%"
+    (echo salarioFuncionarios[%%i]=!salarioFuncionarios[%%i]!)>> "%DB_FILE%"
+)
+goto :eof
+
 :LOGIN
 cls
 echo ========== LOGIN ==========
-if "%jaExisteCadastro%"=="falso" (
+if "!jaExisteCadastro!"=="falso" (
     echo Nenhum administrador cadastrado.
     echo Cadastre uma conta primeiro.
     pause
@@ -47,8 +79,9 @@ set "senhaTentativa="
 set /p "usuarioTentativa=Usuario: "
 set /p "senhaTentativa=Senha: "
 
-if "%usuarioTentativa%"=="%usuarioCadastrado%" (
-    if "%senhaTentativa%"=="%senhaCadastrada%" (
+:: Validacao exata sem espacos espelhos
+if "!usuarioTentativa!"=="!usuarioCadastrado!" (
+    if "!senhaTentativa!"=="!senhaCadastrada!" (
         set "logado=verdadeiro"
         goto :MENU_PRINCIPAL
     )
@@ -60,28 +93,47 @@ goto :MENU_ACESSO
 :CADASTRO_ADM
 cls
 echo ===== CADASTRO ADMINISTRATIVO =====
-if "%jaExisteCadastro%"=="verdadeiro" (
-    echo Ja existe um administrador cadastrado.
-    echo Nao e permitido substituir a conta.
-    pause
-    goto :MENU_ACESSO
-)
 set "usuarioCadastrado="
 set "senhaCadastrada="
-set /p "usuarioCadastrado=Crie um usuario: "
-set /p "senhaCadastrada=Crie uma senha: "
+set /p "usuarioCadastrado=Crie/Altere o usuario: "
+set /p "senhaCadastrada=Crie/Altere a senha: "
 
 if "%usuarioCadastrado%"=="" goto :ADM_INVALIDO
 if "%senhaCadastrada%"=="" goto :ADM_INVALIDO
 
 set "jaExisteCadastro=verdadeiro"
-echo Administrador cadastrado com sucesso!
-echo Agora faca login.
+call :SALVAR_DB
+echo Administrador configurado com sucesso!
+echo Dados salvos no banco de dados.
 pause
 goto :MENU_ACESSO
 
 :ADM_INVALIDO
 echo Erro: usuario e senha sao obrigatorios!
+pause
+goto :MENU_ACESSO
+
+:REMOVER_ADM
+cls
+echo ===== REMOVER CONTA ADMINISTRATIVA =====
+if "!jaExisteCadastro!"=="falso" (
+    echo Nao existe nenhuma conta cadastrada para remover.
+    pause
+    goto :MENU_ACESSO
+)
+echo Tem certeza que deseja deletar o administrador "!usuarioCadastrado!"?
+set "confirmarRemover="
+set /p "confirmarRemover=Digite S para Sim ou N para Nao: "
+
+if /i "%confirmarRemover%"=="S" (
+    set "jaExisteCadastro=falso"
+    set "usuarioCadastrado="
+    set "senhaCadastrada="
+    call :SALVAR_DB
+    echo Conta administrativa removida com sucesso do banco!
+) else (
+    echo Operacao cancelada.
+)
 pause
 goto :MENU_ACESSO
 
@@ -115,35 +167,31 @@ goto :MENU_PRINCIPAL
 :MENU_FUNCIONARIOS
 cls
 echo ===== FUNCIONARIOS =====
-echo 1 - Cadastrar funcionario
-echo 2 - Listar funcionarios
-echo 3 - Voltar
+echo 1 - Cadastrar/Alterar funcionario
+echo 2 - Remover funcionario (Demitir)
+echo 3 - Listar funcionários
+echo 4 - Voltar
 echo.
 set "opcaoFuncionario="
 set /p "opcaoFuncionario=Opcao: "
 
 if "%opcaoFuncionario%"=="1" goto :CADASTRAR_FUNC
-if "%opcaoFuncionario%"=="2" goto :LISTAR_FUNC
-if "%opcaoFuncionario%"=="3" goto :MENU_PRINCIPAL
+if "%opcaoFuncionario%"=="2" goto :REMOVER_FUNC
+if "%opcaoFuncionario%"=="3" goto :LISTAR_FUNC
+if "%opcaoFuncionario%"=="4" goto :MENU_PRINCIPAL
 echo Opcao invalida!
 pause
 goto :MENU_FUNCIONARIOS
 
 :CADASTRAR_FUNC
 cls
-echo === CADASTRAR FUNCIONARIO ===
+echo === CADASTRAR / ALTERAR FUNCIONARIO ===
 set "i="
 set /p "i=Posicao de 1 a 5: "
 
 if "%i%"=="" goto :FUNC_INVALIDO
 if %i% lss 1 goto :FUNC_INVALIDO
 if %i% gtr 5 goto :FUNC_INVALIDO
-
-if "!cadastradoFuncionarios[%i%]!"=="verdadeiro" (
-    echo Erro: vaga ocupada!
-    pause
-    goto :MENU_FUNCIONARIOS
-)
 
 set "nomeTemp="
 set "idadeTemp="
@@ -160,7 +208,35 @@ set "nomeFuncionarios[%i%]=%nomeTemp%"
 set "idadeFuncionarios[%i%]=%idadeTemp%"
 set "salarioFuncionarios[%i%]=%salarioTemp%"
 set "cadastradoFuncionarios[%i%]=verdadeiro"
-echo Funcionario cadastrado com sucesso!
+
+call :SALVAR_DB
+echo Funcionario updated com sucesso e salvo no banco!
+pause
+goto :MENU_FUNCIONARIOS
+
+:REMOVER_FUNC
+cls
+echo === REMOVER FUNCIONARIO ===
+set "i="
+set /p "i=Informe a posicao (1 a 5) para remover: "
+
+if "%i%"=="" goto :FUNC_INVALIDO
+if %i% lss 1 goto :FUNC_INVALIDO
+if %i% gtr 5 goto :FUNC_INVALIDO
+
+if "!cadastradoFuncionarios[%i%]!"=="falso" (
+    echo Esta posicao ja esta vazia.
+    pause
+    goto :MENU_FUNCIONARIOS
+)
+
+set "cadastradoFuncionarios[%i%]=falso"
+set "nomeFuncionarios[%i%]="
+set "idadeFuncionarios[%i%]=0"
+set "salarioFuncionarios[%i%]=0"
+
+call :SALVAR_DB
+echo Funcionario removido com sucesso do banco!
 pause
 goto :MENU_FUNCIONARIOS
 
@@ -196,8 +272,8 @@ goto :MENU_FUNCIONARIOS
 cls
 echo ===== CONTROLE DE ESTOQUE =====
 echo Quantidade atual: %qtdProdutos%
-echo 1 - Entrada de produtos
-echo 2 - Baixa de produtos
+echo 1 - Entrada de produtos (Adicionar)
+echo 2 - Baixa de produtos (Remover)
 echo 3 - Voltar
 echo.
 set "opcaoEstoque="
@@ -219,7 +295,8 @@ if %adicionarEstoque% lss 1 (
     echo Erro: informe uma quantidade positiva!
 ) else (
     set /a qtdProdutos=qtdProdutos+adicionarEstoque
-    echo Entrada registrada com sucesso!
+    call :SALVAR_DB
+    echo Entrada registrada com sucesso e alterada no banco!
     echo Estoque atual: %qtdProdutos%
 )
 pause
@@ -237,7 +314,8 @@ if %removerEstoque% lss 1 (
         echo Erro: estoque insuficiente!
     ) else (
         set /a qtdProdutos=qtdProdutos-removerEstoque
-        echo Baixa registrada com sucesso!
+        call :SALVAR_DB
+        echo Baixa registrada com sucesso e alterada no banco!
         echo Estoque atual: %qtdProdutos%
     )
 )
@@ -248,8 +326,8 @@ goto :MENU_ESTOQUE
 cls
 echo ===== FLUXO DE CAIXA =====
 echo Saldo atual: R$ %saldoCaixa%,00
-echo 1 - Registrar entrada
-echo 2 - Registrar pagamento
+echo 1 - Registrar entrada (Adicionar)
+echo 2 - Registrar pagamento (Remover)
 echo 3 - Voltar
 echo.
 set "opcaoCaixa="
@@ -271,7 +349,8 @@ if %valorMovimentado% lss 1 (
     echo Erro: o valor deve ser positivo!
 ) else (
     set /a saldoCaixa=saldoCaixa+valorMovimentado
-    echo Entrada registrada!
+    call :SALVAR_DB
+    echo Entrada registrada e alterada no banco!
     echo Saldo atual: R$ %saldoCaixa%,00
 )
 pause
@@ -289,7 +368,8 @@ if %valorMovimentado% lss 1 (
         echo Erro: saldo insuficiente!
     ) else (
         set /a saldoCaixa=saldoCaixa-valorMovimentado
-        echo Pagamento registrado!
+        call :SALVAR_DB
+        echo Pagamento registrado e alterado no banco!
         echo Saldo atual: R$ %saldoCaixa%,00
     )
 )
@@ -299,6 +379,9 @@ goto :MENU_CAIXA
 :ENCERRAR
 cls
 echo Encerrando o Ferriraplas...
+echo Garantindo que todos os dados estao salvos...
+call :SALVAR_DB
 echo Ate logo!
 timeout /t 3 >nul
 exit
+
